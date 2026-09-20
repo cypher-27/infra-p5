@@ -1,11 +1,59 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+import '../styles/global.css';
+import { formatDeployDate } from '../utils/formatDate';
+const deployedAt = formatDeployDate();
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+const steps = [
+  'Push / Merge a main',
+  'GitHub Actions: checkout → check → test → build',
+  'Wrangler sube la versión a Cloudflare',
+  'Propagación global a la red edge',
+];
 ---
+<html lang="es">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Infra P5 — CI/CD Pipeline</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+	</head>
+	<body class="min-h-screen bg-black text-white font-sans antialiased">
+		<div class="relative min-h-screen overflow-hidden">
+			<div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(99,102,241,0.25),transparent_60%)]"></div>
 
-<Layout>
-	<Welcome />
-</Layout>
+			<main class="relative z-10 flex flex-col items-center justify-center min-h-screen px-6 text-center">
+				<span class="animate-fade-in inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/70 backdrop-blur-md">
+					Desplegado el {deployedAt}
+				</span>
+
+				<h1 class="animate-fade-in mt-6 text-5xl sm:text-7xl font-semibold tracking-tight">
+					Infra P5
+				</h1>
+				<p class="animate-fade-in mt-4 max-w-xl text-lg text-white/60">
+					Pipeline de CI/CD reproducible con GitHub Actions y Cloudflare Workers.
+				</p>
+
+				<section class="animate-fade-in mt-16 w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-left backdrop-blur-xl shadow-2xl">
+					<h2 class="text-sm font-medium text-white/50 uppercase tracking-wider mb-4">Flujo del pipeline</h2>
+					<ol class="space-y-3">
+						{steps.map((step, i) => (
+							<li class="flex items-start gap-3">
+								<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
+									{i + 1}
+								</span>
+								<span class="text-white/80 text-sm pt-0.5">{step}</span>
+							</li>
+						))}
+					</ol>
+				</section>
+
+				<footer class="mt-16 text-xs text-white/30">
+					ITESO · Práctica 5 · Cloud Infrastructure
+				</footer>
+			</main>
+		</div>
+	</body>
+</html>
+
