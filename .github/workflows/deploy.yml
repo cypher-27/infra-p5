@@ -6,7 +6,7 @@ on:
       - main
 
 concurrency:
-  group: production-deploy
+  group: deploy-production
   cancel-in-progress: false
 
 jobs:
@@ -27,11 +27,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Type-check (astro check)
+      - name: Type check (astro check)
         run: npm run check
 
-      - name: Run unit tests
-        run: npm run test
+      - name: Run unit tests (Vitest)
+        run: npm run test -- --run
 
   deploy:
     needs: test
@@ -51,7 +51,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Astro project
+      - name: Build Astro project (Tailwind incluido)
         run: npm run build
 
       - name: Deploy to Cloudflare Workers
