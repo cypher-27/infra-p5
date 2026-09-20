@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 concurrency:
   group: deploy-production
@@ -35,6 +38,8 @@ jobs:
 
   deploy:
     needs: test
+    # Solo despliega si el evento es un 'push' directo a main (al hacer merge del PR)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
