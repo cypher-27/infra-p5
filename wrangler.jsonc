@@ -1,14 +1,21 @@
 {
-	"$schema": "./node_modules/wrangler/config-schema.json",
-	"compatibility_date": "2026-09-18",
-	"compatibility_flags": ["global_fetch_strictly_public"],
-	"name": "infra-p5",
-	"main": "@astrojs/cloudflare/entrypoints/server",
-	"assets": {
-		"directory": "./dist",
-		"binding": "ASSETS"
-	},
-	"observability": {
-		"enabled": true
-	}
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-09-18",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "name": "infra-p5",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+  },
+  "observability": {
+    "enabled": true,
+  },
+  "d1_databases": [
+    {
+      "binding": "p6",
+      "database_name": "p6",
+      "database_id": "835ba671-2fdd-4faf-bdea-a2a29992b117",
+    },
+  ],
 }
