@@ -1,16 +1,16 @@
 ---
 export const prerender = false;
 
-import { env } from "cloudflare:workers";
-import "../styles/global.css";
-import { formatDeployDate } from "../utils/formatDate";
+import { env } from 'cloudflare:workers';
+import '../styles/global.css';
+import { formatDeployDate } from '../utils/formatDate';
 const deployedAt = formatDeployDate();
 
 const steps = [
-  "Push / Merge a main",
-  "GitHub Actions: checkout → check → test → build",
-  "Wrangler sube la versión a Cloudflare",
-  "Propagación global a la red edge",
+  'Push / Merge a main',
+  'GitHub Actions: checkout → check → test → build',
+  'Wrangler sube la versión a Cloudflare',
+  'Propagación global a la red edge',
 ];
 
 export interface Env {
@@ -21,111 +21,142 @@ const typedEnv = env as unknown as Env;
 
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
-  const name = formData.get('name')?.toString().trim().slice(0, 100);
-  const email = formData.get('email')?.toString().trim().slice(0, 100);
-  if (name && email) {
-    await typedEnv.p6
-      .prepare('INSERT INTO users (name, email) VALUES (?, ?)')
-      .bind(name, email)
-      .run();
+  const honeypot = formData.get('website');
+
+  if (!honeypot) {
+    const action = formData.get('_action');
+
+    if (action === 'delete') {
+      const id = formData.get('id');
+      if (id) {
+        await typedEnv.p6.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
+      }
+    } else {
+      const name = formData.get('name')?.toString().trim().slice(0, 100);
+      const emailRaw = formData.get('email')?.toString().trim().slice(0, 100);
+
+      if (name && name.length > 0 && emailRaw && emailRaw.includes('@')) {
+        await typedEnv.p6
+          .prepare('INSERT INTO users (name, email) VALUES (?, ?)')
+          .bind(name, emailRaw)
+          .run();
+      } else {
+        return Astro.redirect('/?error=invalid', 303);
+      }
+    }
   }
+
+  return Astro.redirect('/', 303);
 }
 
-const { results: users } = await typedEnv.p6
-  .prepare("SELECT * FROM users")
-  .all();
+const errorParam = Astro.url.searchParams.get('error');
+const { results: users } = await typedEnv.p6.prepare('SELECT * FROM users ORDER BY id ASC').all();
 ---
-
 <html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Infra P6 — D1 Database</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-  </head>
-  <body class="min-h-screen bg-black text-white font-sans antialiased">
-    <div class="relative min-h-screen overflow-hidden">
-      <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(99,102,241,0.25),transparent_60%)]"></div>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Infra P6 — D1 Database</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body class="min-h-screen bg-black text-white font-sans antialiased">
+<div class="relative min-h-screen overflow-hidden">
+<div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(99,102,241,0.25),transparent_60%)]"></div>
 
-      <main class="relative z-10 flex flex-col items-center justify-center min-h-screen px-6 text-center py-16">
-        <span class="animate-fade-in inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/70 backdrop-blur-md">
-          Desplegado el {deployedAt}
-        </span>
+<main class="relative z-10 flex flex-col items-center justify-center min-h-screen px-6 text-center py-16">
+<span class="animate-fade-in inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/70 backdrop-blur-md">
+Desplegado el {deployedAt}
+</span>
 
-        <h1 class="animate-fade-in mt-6 text-5xl sm:text-7xl font-semibold tracking-tight">
-          Infra P6
-        </h1>
-        <p class="animate-fade-in mt-4 max-w-xl text-lg text-white/60">
-          Pipeline de CI/CD con GitHub Actions, Cloudflare Workers y base de
-          datos D1.
-        </p>
+<h1 class="animate-fade-in mt-6 text-5xl sm:text-7xl font-semibold tracking-tight">
+Infra P6
+</h1>
+<p class="animate-fade-in mt-4 max-w-xl text-lg text-white/60">
+Pipeline de CI/CD con GitHub Actions, Cloudflare Workers y base de datos D1.
+</p>
 
-        <section class="animate-fade-in mt-16 w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-left backdrop-blur-xl shadow-2xl">
-          <h2 class="text-sm font-medium text-white/50 uppercase tracking-wider mb-4">
-            Flujo del pipeline
-          </h2>
-          <ol class="space-y-3">
-            {steps.map((step, i) => (
-              <li class="flex items-start gap-3">
-                <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
-                  {i + 1}
-                </span>
-                <span class="text-white/80 text-sm pt-0.5">{step}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
+<details class="animate-fade-in mt-16 w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-left backdrop-blur-xl shadow-2xl group">
+<summary class="text-sm font-medium text-white/50 uppercase tracking-wider cursor-pointer list-none flex items-center justify-between">
+  <span>Flujo del pipeline</span>
+  <span class="text-white/40 transition-transform group-open:rotate-180">▾</span>
+</summary>
+<ol class="space-y-3 mt-4">
+{steps.map((step, i) => (
+<li class="flex items-start gap-3">
+<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
+{i + 1}
+</span>
+<span class="text-white/80 text-sm pt-0.5">{step}</span>
+</li>
+))}
+</ol>
+</details>
 
-        <section class="animate-fade-in mt-8 w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-left backdrop-blur-xl shadow-2xl">
-          <h2 class="text-sm font-medium text-white/50 uppercase tracking-wider mb-4">
-            Base de datos D1 — Usuarios
-          </h2>
+<section class="animate-fade-in mt-8 w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-left backdrop-blur-xl shadow-2xl">
+<h2 class="text-sm font-medium text-white/50 uppercase tracking-wider mb-4">Base de datos D1 — Usuarios</h2>
 
-          <form method="POST" class="flex flex-col gap-2 mb-5">
-            <input
-              name="name"
-              placeholder="Nombre"
-              required
-              class="rounded-lg bg-white/10 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/30"
-            />
-            <input
-              name="email"
-              type="text"
-              placeholder="Email"
-              required
-              class="rounded-lg bg-white/10 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/30"
-            />
-            <button
-              type="submit"
-              class="rounded-lg bg-white text-black text-sm font-semibold py-2 hover:bg-white/80 transition"
-            >
-              Agregar usuario
-            </button>
-          </form>
+{errorParam === 'invalid' && (
+<p class="text-xs text-red-400 mb-3 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
+  El email debe contener un "@". Intenta de nuevo.
+</p>
+)}
 
-          <ul class="space-y-2">
-            {users.map((user: any) => (
-              <li class="flex items-center gap-3 rounded-lg bg-white/5 border border-white/5 px-3 py-2">
-                <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/30 text-xs font-semibold">
-                  {user.id}
-                </span>
-                <span class="text-white/80 text-sm">
-                  {user.name} · {user.email}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+<form method="POST" class="flex flex-col gap-2 mb-5">
+  <input type="text" name="website" class="hidden" tabindex="-1" autocomplete="off" />
 
-        <footer class="mt-16 text-xs text-white/30">
-          ITESO · Práctica 6 · Infraestrucura para el Desarrollo Continuo
-        </footer>
-      </main>
-    </div>
-  </body>
+  <input
+    name="name"
+    type="text"
+    placeholder="Nombre"
+    required
+    maxlength="100"
+    class="rounded-lg bg-white/10 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/30"
+  />
+  <input
+    name="email"
+    type="text"
+    placeholder="Email"
+    required
+    maxlength="100"
+    class="rounded-lg bg-white/10 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-white/30"
+  />
+  <button
+    type="submit"
+    class="rounded-lg bg-white text-black text-sm font-semibold py-2 hover:bg-white/80 transition"
+  >
+    Agregar usuario
+  </button>
+</form>
+
+<ul class="space-y-2">
+{users.map((user: any) => (
+<li class="flex items-center gap-3 rounded-lg bg-white/5 border border-white/5 px-3 py-2">
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/30 text-xs font-semibold">
+    {user.id}
+  </span>
+  <span class="text-white/80 text-sm flex-1">{user.name} · {user.email}</span>
+  <form method="POST" class="shrink-0">
+    <input type="hidden" name="_action" value="delete" />
+    <input type="hidden" name="id" value={user.id} />
+    <button
+      type="submit"
+      class="text-xs text-red-400/70 hover:text-red-400 transition px-2"
+      aria-label={`Eliminar ${user.name}`}
+    >
+      ✕
+    </button>
+  </form>
+</li>
+))}
+</ul>
+</section>
+
+<footer class="mt-16 text-xs text-white/30">
+ITESO · Práctica 6 · Infraestructura para el Desarrollo Continuo
+</footer>
+</main>
+</div>
+</body>
 </html>
