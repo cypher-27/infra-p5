@@ -4,59 +4,40 @@ export const prerender = false;
 import { env } from 'cloudflare:workers';
 import '../styles/global.css';
 import { formatDeployDate } from '../utils/formatDate';
+import { processUserForm } from '../utils/formHandler';
+import { listUsers, type DbLike } from '../utils/users';
+
 const deployedAt = formatDeployDate();
+const db = (env as unknown as { p6: DbLike }).p6;
+const appEnv = (env as unknown as { APP_ENV?: string }).APP_ENV ?? 'local';
 
 const steps = [
   'Push / Merge a main',
-  'GitHub Actions: checkout → check → test → build',
-  'Wrangler sube la versión a Cloudflare',
-  'Propagación global a la red edge',
+  'GitHub Actions: checkout → check → test + coverage → build',
+  'Despliegue a UAT (infra-p5) y smoke test',
+  'Aprobación manual y despliegue a Producción',
 ];
 
-export interface Env {
-  p6: D1Database;
-}
-
-const typedEnv = env as unknown as Env;
+const ERRORS: Record<string, string> = {
+  invalid_name: 'El nombre es obligatorio.',
+  invalid_email: 'Ingresa un email válido (ej. nombre@dominio.com).',
+  invalid_id: 'El identificador del usuario no es válido.',
+  server: 'Ocurrió un error en el servidor. Intenta de nuevo.',
+};
 
 if (Astro.request.method === 'POST') {
-  const formData = await Astro.request.formData();
-  const honeypot = formData.get('website');
-
-  if (!honeypot) {
-    const action = formData.get('_action');
-
-    if (action === 'delete') {
-      const id = formData.get('id');
-      if (id) {
-        await typedEnv.p6.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
-      }
-    } else {
-      const name = formData.get('name')?.toString().trim().slice(0, 100);
-      const emailRaw = formData.get('email')?.toString().trim().slice(0, 100);
-
-      if (name && name.length > 0 && emailRaw && emailRaw.includes('@')) {
-        await typedEnv.p6
-          .prepare('INSERT INTO users (name, email) VALUES (?, ?)')
-          .bind(name, emailRaw)
-          .run();
-      } else {
-        return Astro.redirect('/?error=invalid', 303);
-      }
-    }
-  }
-
-  return Astro.redirect('/', 303);
+  const location = await processUserForm(await Astro.request.formData(), db);
+  return Astro.redirect(location, 303);
 }
 
-const errorParam = Astro.url.searchParams.get('error');
-const { results: users } = await typedEnv.p6.prepare('SELECT * FROM users ORDER BY id ASC').all();
+const errorMessage = ERRORS[Astro.url.searchParams.get('error') ?? ''];
+const users = await listUsers(db);
 ---
 <html lang="es">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Infra P6 — D1 Database</title>
+<title>Infra P7</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -67,7 +48,7 @@ const { results: users } = await typedEnv.p6.prepare('SELECT * FROM users ORDER 
 
 <main class="relative z-10 flex flex-col items-center justify-center min-h-screen px-6 text-center py-16">
 <span class="animate-fade-in inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/70 backdrop-blur-md">
-Desplegado el {deployedAt}
+  Entorno: {appEnv} · Desplegado el {deployedAt}
 </span>
 
 <h1 class="animate-fade-in mt-6 text-5xl sm:text-7xl font-semibold tracking-tight">
@@ -97,11 +78,7 @@ Pipeline de CI/CD con GitHub Actions, Cloudflare Workers y base de datos D1.
 <section class="animate-fade-in mt-8 w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-left backdrop-blur-xl shadow-2xl">
 <h2 class="text-sm font-medium text-white/50 uppercase tracking-wider mb-4">Base de datos D1 — Usuarios</h2>
 
-{errorParam === 'invalid' && (
-<p class="text-xs text-red-400 mb-3 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
-  El email debe contener un "@". Intenta de nuevo.
-</p>
-)}
+{errorMessage && (<p class="text-xs text-red-400 mb-3 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2" role="alert">{errorMessage}</p>)}
 
 <form method="POST" class="flex flex-col gap-2 mb-5">
   <input type="text" name="website" class="hidden" tabindex="-1" autocomplete="off" />
@@ -116,7 +93,7 @@ Pipeline de CI/CD con GitHub Actions, Cloudflare Workers y base de datos D1.
   />
   <input
     name="email"
-    type="text"
+    type="email"
     placeholder="Email"
     required
     maxlength="100"
@@ -131,7 +108,7 @@ Pipeline de CI/CD con GitHub Actions, Cloudflare Workers y base de datos D1.
 </form>
 
 <ul class="space-y-2">
-{users.map((user: any) => (
+{users.map((user) => (
 <li class="flex items-center gap-3 rounded-lg bg-white/5 border border-white/5 px-3 py-2">
   <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/30 text-xs font-semibold">
     {user.id}

@@ -1,0 +1,7 @@
+export const prerender = false;
+
+export const GET = () =>
+  new Response(JSON.stringify({ status: 'ok' }), {
+    status: 200,
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+  });
