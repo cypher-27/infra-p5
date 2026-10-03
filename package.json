@@ -11,6 +11,7 @@
     "preview": "astro build && astro preview",
     "check": "astro check",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "astro": "astro",
     "generate-types": "wrangler types",
     "deploy": "astro build && wrangler deploy",

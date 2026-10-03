@@ -1,67 +1,128 @@
-name: Deploy Worker
+name: Pipeline UAT to Prod
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 concurrency:
-  group: deploy-production
+  group: pipeline-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  test:
+  build-test:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
-      - name: Type check (astro check)
+      - name: Type check
         run: npm run check
 
-      - name: Run unit tests (Vitest)
-        run: npm run test -- --run
+      - name: Unit tests with coverage
+        shell: bash
+        run: npm run test:coverage 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
 
-  deploy:
-    needs: test
-    # Solo despliega si el evento es un 'push' directo a main (al hacer merge del PR)
+      - name: UAT summary
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p coverage
+          sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/test-output.txt" > coverage/test-output.txt || true
+          {
+            echo "## UAT Report - Unit tests & coverage"
+            echo '```'
+            cat coverage/test-output.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: astro-dist
+          path: |
+            dist/
+            .wrangler/deploy/
+          include-hidden-files: true
+          retention-days: 7
+
+  deploy-uat:
+    needs: build-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: uat
     permissions:
       contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Astro project
-        run: npm run build
-
-      - name: Deploy to Cloudflare Workers
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: astro-dist
+          path: .
+      - name: Deploy to UAT (infra-p5)
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --name infra-p5 --var APP_ENV:uat
+
+      - name: Smoke test UAT
+        run: |
+          curl --fail --silent --show-error --retry 6 --retry-delay 5 --retry-all-errors \
+            https://infra-p5.cyphernexon27-home.workers.dev/api/health
+
+  deploy-prod:
+    needs: deploy-uat
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: astro-dist
+          path: .
+      - name: Deploy to Prod (infra-p5-prod)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --name infra-p5-prod --var APP_ENV:production
+
+      - name: Smoke test Prod
+        run: |
+          curl --fail --silent --show-error --retry 6 --retry-delay 5 --retry-all-errors \
+            https://infra-p5-prod.cyphernexon27-home.workers.dev/api/health
 
